@@ -6,4 +6,4 @@ Running a reflection pass over observations captured since the last reflection.
 
 !`${CLAUDE_PLUGIN_ROOT}/scripts/om-reflect.sh "{}"`
 
-Summarize what was reflected. If the script reported it skipped (too few observations or no provider), say so plainly.
+Summarize what was reflected. If the script reported it skipped (too few unreflected observations, or the `claude` CLI wasn't found), say so plainly.

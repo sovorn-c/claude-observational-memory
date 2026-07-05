@@ -1,23 +1,36 @@
 #!/usr/bin/env bash
-# om-status.sh — print a concise status of observational memory storage.
+# om-status.sh — print a concise status of observational memory storage,
+# aggregated across every session directory.
 set -euo pipefail
 source "${CLAUDE_PLUGIN_ROOT}/scripts/om-config.sh"
 om_config_init
 
-obs_count=0; refl_count=0; obs_size=0; refl_size=0
-if [ -f "$OM_OBSERVATIONS" ]; then
-  obs_count=$(grep -c . "$OM_OBSERVATIONS" 2>/dev/null || true); obs_count=${obs_count:-0}
-  obs_size=$(wc -c < "$OM_OBSERVATIONS" 2>/dev/null | tr -d ' ' || true); obs_size=${obs_size:-0}
-fi
-if [ -f "$OM_REFLECTIONS" ]; then
-  refl_count=$(grep -c . "$OM_REFLECTIONS" 2>/dev/null || true); refl_count=${refl_count:-0}
-  refl_size=$(wc -c < "$OM_REFLECTIONS" 2>/dev/null | tr -d ' ' || true); refl_size=${refl_size:-0}
+session_count=0 obs_count=0 refl_count=0 dropped_count=0 total_size=0
+if [ -d "$OM_SESSIONS_DIR" ]; then
+  for dir in "$OM_SESSIONS_DIR"/*/; do
+    [ -d "$dir" ] || continue
+    session_count=$((session_count + 1))
+    for name in observations.jsonl reflections.jsonl dropped.jsonl; do
+      f="${dir}${name}"
+      [ -f "$f" ] || continue
+      c=$(grep -c . "$f" 2>/dev/null || true); c=${c:-0}
+      s=$(wc -c < "$f" 2>/dev/null | tr -d ' ' || true); s=${s:-0}
+      total_size=$((total_size + s))
+      case "$name" in
+        observations.jsonl) obs_count=$((obs_count + c)) ;;
+        reflections.jsonl) refl_count=$((refl_count + c)) ;;
+        dropped.jsonl) dropped_count=$((dropped_count + c)) ;;
+      esac
+    done
+  done
 fi
 
 echo "claude-observational-memory status"
 echo "  data dir:      $OM_DIR"
-echo "  observations:  ${obs_count} entries (${obs_size} bytes)"
-echo "  reflections:   ${refl_count} entries (${refl_size} bytes)"
+echo "  sessions:      ${session_count}"
+echo "  observations:  ${obs_count} entries, ${dropped_count} dropped from active pool"
+echo "  reflections:   ${refl_count} entries"
+echo "  total size:    ${total_size} bytes"
 echo "  last injected: ${OM_LAST_INJECTED}"
 if [ -f "$OM_CONFIG" ]; then
   echo "  config:"

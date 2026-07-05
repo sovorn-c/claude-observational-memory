@@ -1,6 +1,6 @@
 {
-  "name": "sovorn-g-om",
-  "owner": { "name": "sovorn-g" },
+  "name": "sovorn-c-om",
+  "owner": { "name": "sovorn-c" },
   "plugins": [
     {
       "name": "claude-observational-memory",

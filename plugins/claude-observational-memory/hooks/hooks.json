@@ -12,24 +12,14 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/om-observe.sh"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/om-observe.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/om-consolidate.sh",
+            "timeout": 60
           }
         ]
       }
