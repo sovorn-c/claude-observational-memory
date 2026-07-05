@@ -1,0 +1,5 @@
+# claude-observational-memory
+# local runtime data is created under ~/.local/share/claude-observational-memory/
+debug/
+*.log
+.DS_Store
