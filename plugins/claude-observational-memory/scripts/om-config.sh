@@ -201,9 +201,9 @@ om_llm_base_url() {
 # the opencode CLI), so `llmModel` must be set explicitly for that provider.
 om_llm_default_model() {
   case "$1" in
-    openai)     printf 'gpt-4o-mini' ;;
+    openai)     printf 'gpt-5.4-nano' ;;
     openrouter) printf 'meta-llama/llama-3.1-8b-instruct' ;;
-    gemini)     printf 'gemini-3.5-flash' ;;
+    gemini)     printf 'gemini-3.1-flash-lite' ;;
     deepseek)   printf 'deepseek-chat' ;;
     ollama)     printf 'llama3.2' ;;
     *)          printf '' ;;
