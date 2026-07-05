@@ -34,6 +34,18 @@ echo "  total size:    ${total_size} bytes"
 echo "  last injected: ${OM_LAST_INJECTED}"
 if [ -f "$OM_CONFIG" ]; then
   echo "  config:"
-  jq -r 'to_entries[] | "    \(.key): \(.value)"' "$OM_CONFIG" 2>/dev/null || cat "$OM_CONFIG" | sed 's/^/    /'
+  jq -r 'to_entries[] | "    \(.key): \(if (.key | test("key";"i")) then (if ((.value|tostring|length) > 0) then "(set)" else "(unset)" end) else .value end)"' \
+    "$OM_CONFIG" 2>/dev/null || cat "$OM_CONFIG" | sed 's/^/    /'
+fi
+llm_key=$(om_config_get llmApiKey "")
+if [ -n "$llm_key" ]; then
+  llm_provider=$(om_config_get llmProvider "openai")
+  llm_model=$(om_config_get llmModel "")
+  [ -n "$llm_model" ] || llm_model=$(om_llm_default_model "$llm_provider")
+  llm_base_url=$(om_config_get llmBaseUrl "")
+  [ -n "$llm_base_url" ] || llm_base_url=$(om_llm_base_url "$llm_provider")
+  echo "  model route:  unified LLM (${llm_provider}: ${llm_model:-?} via ${llm_base_url:-?})"
+else
+  echo "  model route:  claude CLI ($(om_config_get model claude-haiku-4-5-20251001))"
 fi
 exit 0

@@ -157,11 +157,141 @@ om_usage_tokens_at_line() {
     2>/dev/null || printf '0'
 }
 
+# om_model_caps_file — per-"provider:model" cache recording whether that
+# model accepts a reasoning/thinking parameter, so a model that doesn't
+# support it is only ever probed once, not on every call. Keyed by provider
+# too since the same model name can exist on multiple providers with
+# different capabilities.
+om_model_caps_file() { printf '%s/model-caps.json' "${OM_DIR}"; }
+
+om_model_caps_get() {
+  local key="$1" f
+  f=$(om_model_caps_file)
+  [ -f "$f" ] || { printf ''; return 0; }
+  jq -r --arg m "$key" '.[$m] // empty' "$f" 2>/dev/null
+}
+
+om_model_caps_set() {
+  local key="$1" val="$2" f cur='{}'
+  f=$(om_model_caps_file)
+  [ -f "$f" ] && cur=$(cat "$f" 2>/dev/null || echo '{}')
+  jq -n --argjson cur "$cur" --arg m "$key" --arg v "$val" '$cur + {($m): $v}' \
+    > "${f}.tmp" 2>/dev/null && mv "${f}.tmp" "$f" 2>/dev/null || om_log "model-caps: failed to write $f"
+}
+
+# om_llm_base_url <provider> — resolves a short provider name to its
+# OpenAI-compatible API base URL, so the user never has to know or type one.
+# `llmBaseUrl` (if set) always wins, for self-hosted/custom deployments of a
+# known provider or a provider not in this list.
+om_llm_base_url() {
+  case "$1" in
+    openai)      printf 'https://api.openai.com/v1' ;;
+    openrouter)  printf 'https://openrouter.ai/api/v1' ;;
+    gemini)      printf 'https://generativelanguage.googleapis.com/v1beta/openai' ;;
+    deepseek)    printf 'https://api.deepseek.com/v1' ;;
+    ollama)      printf 'http://localhost:11434/v1' ;;
+    opencode-go) printf 'https://opencode.ai/zen/go/v1' ;;
+    *)           printf '' ;;
+  esac
+}
+
+# om_llm_default_model <provider> — used only when `llmModel` is unset, so
+# setting just `llmProvider` + `llmApiKey` works out of the box. `opencode-go`
+# has no default: its model catalog is curated per-account (see `/models` in
+# the opencode CLI), so `llmModel` must be set explicitly for that provider.
+om_llm_default_model() {
+  case "$1" in
+    openai)     printf 'gpt-4o-mini' ;;
+    openrouter) printf 'meta-llama/llama-3.1-8b-instruct' ;;
+    gemini)     printf 'gemini-3.5-flash' ;;
+    deepseek)   printf 'deepseek-chat' ;;
+    ollama)     printf 'llama3.2' ;;
+    *)          printf '' ;;
+  esac
+}
+
+# om_chat_body <system> <user> <schema> <model> <max_tokens> <effort>
+# Builds an OpenAI-compatible /chat/completions request body. <effort> empty
+# omits reasoning_effort entirely, for models that don't support thinking.
+om_chat_body() {
+  local system="$1" user="$2" schema="$3" model="$4" max_tokens="$5" effort="$6"
+  jq -n \
+    --arg model "$model" --arg system "$system" --arg user "$user" \
+    --argjson max_tokens "$max_tokens" --arg effort "$effort" --arg schema "$schema" \
+    '{model: $model, max_tokens: $max_tokens,
+      messages: [{role:"system", content:$system}, {role:"user", content:$user}]}
+     + (if $effort != "" then {reasoning_effort: $effort} else {} end)
+     + (if $schema != "" then
+          {response_format: {type:"json_schema", json_schema: {name:"om_output", strict:true, schema:($schema|fromjson)}}}
+        else {} end)' 2>/dev/null || true
+}
+
+# om_call_model_unified <system> <user> <schema> — generic OpenAI-compatible
+# /chat/completions route, used instead of the `claude` CLI when `llmApiKey`
+# is configured. Resolves `llmProvider` (default "openai") to a base URL and
+# default model internally, so the user only has to set llmProvider,
+# llmModel (optional), and llmApiKey. Tries reasoning_effort:"high" first
+# (unless this provider:model is already cached as unsupported); on failure,
+# retries once without it and caches the result so future calls for the same
+# provider:model skip the probe.
+om_call_model_unified() {
+  local system="$1" user="$2" schema="$3"
+  local provider model base_url api_key max_tokens cache_key caps body resp content
+  provider=$(om_config_get llmProvider "openai")
+  model=$(om_config_get llmModel "")
+  [ -n "$model" ] || model=$(om_llm_default_model "$provider")
+  base_url=$(om_config_get llmBaseUrl "")
+  [ -n "$base_url" ] || base_url=$(om_llm_base_url "$provider")
+  api_key=$(om_config_get llmApiKey "")
+  max_tokens=$(om_config_get llmMaxTokens 2048)
+
+  if [ -z "$base_url" ] || [ -z "$model" ]; then
+    om_log "model: llmProvider '$provider' unrecognized and no llmBaseUrl/llmModel set"
+    printf ''
+    return 0
+  fi
+
+  cache_key="${provider}:${model}"
+  caps=$(om_model_caps_get "$cache_key")
+
+  if [ "$caps" != "no" ]; then
+    body=$(om_chat_body "$system" "$user" "$schema" "$model" "$max_tokens" "high")
+    resp=$(curl -sS --max-time 60 "${base_url%/}/chat/completions" \
+      -H "Authorization: Bearer ${api_key}" -H "Content-Type: application/json" \
+      -d "$body" 2>/dev/null || true)
+    content=$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
+    if [ -n "$content" ]; then
+      [ "$caps" = "yes" ] || om_model_caps_set "$cache_key" yes
+      printf '%s' "$content"
+      return 0
+    fi
+    om_model_caps_set "$cache_key" no
+    om_log "model: $cache_key rejected reasoning_effort, retrying without it"
+  fi
+
+  body=$(om_chat_body "$system" "$user" "$schema" "$model" "$max_tokens" "")
+  resp=$(curl -sS --max-time 60 "${base_url%/}/chat/completions" \
+    -H "Authorization: Bearer ${api_key}" -H "Content-Type: application/json" \
+    -d "$body" 2>/dev/null || true)
+  printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true
+}
+
 # om_call_model <system_prompt> <user_prompt> <max_budget_usd> [json_schema]
 # Prints the model's raw text response, or empty on any failure. Never fails
-# the caller — always safe to use in `set -e` scripts.
+# the caller — always safe to use in `set -e` scripts. Routes to a generic
+# OpenAI-compatible endpoint when `llmApiKey` is set, otherwise to the
+# `claude` CLI.
 om_call_model() {
   local system="$1" user="$2" budget="${3:-0.03}" schema="${4:-}"
+  local api_key
+  api_key=$(om_config_get llmApiKey "")
+  if [ -n "$api_key" ]; then
+    command -v curl >/dev/null 2>&1 || { om_log "model: curl not found for unified LLM route"; return 0; }
+    om_call_model_unified "$system" "$user" "$schema" \
+      | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+    return 0
+  fi
+
   command -v claude >/dev/null 2>&1 || { om_log "model: claude CLI not found"; return 0; }
   local model
   model=$(om_config_get model claude-haiku-4-5-20251001)
