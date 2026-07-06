@@ -382,6 +382,7 @@ om_call_model() {
 om_run_reflect_pass() {
   local sid="${1:-default}"
   local obs_file refl_file
+  OM_LAST_REFLECT_ADDED=0
   obs_file=$(om_session_observations "$sid")
   refl_file=$(om_session_reflections "$sid")
   [ -s "$obs_file" ] || return 0
@@ -430,6 +431,7 @@ ${obs_jsonl}"
   done < <(printf '%s' "$resp" | jq -c '.reflections[]?' 2>/dev/null || true)
 
   om_log "reflect: wrote $added reflection(s) from $count observations (session $sid)"
+  OM_LAST_REFLECT_ADDED="$added"
   [ "$added" -gt 0 ] && om_run_dropper_pass "$sid"
   return 0
 }
