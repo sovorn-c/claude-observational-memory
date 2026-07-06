@@ -46,7 +46,9 @@ if [ -n "$llm_key" ]; then
   [ -n "$llm_base_url" ] || llm_base_url=$(om_llm_base_url "$llm_provider")
   llm_budget=$(om_config_get llmMaxBudgetUsd 0.05)
   llm_effort=$(om_config_get llmReasoningEffort "default")
-  echo "  model route:  unified LLM (${llm_provider}: ${llm_model:-?} via ${llm_base_url:-?}, reasoning effort ${llm_effort}, max budget \$${llm_budget}/call)"
+  llm_schema_mode="json_schema"
+  [ "$(om_model_caps_get "${llm_provider}:${llm_model}:schema")" = "object" ] && llm_schema_mode="json_object (fallback)"
+  echo "  model route:  unified LLM (${llm_provider}: ${llm_model:-?} via ${llm_base_url:-?}, reasoning effort ${llm_effort}, structured output ${llm_schema_mode}, max budget \$${llm_budget}/call)"
 else
   echo "  model route:  NOT CONFIGURED — set llmApiKey to enable observe/reflect"
 fi

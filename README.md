@@ -100,25 +100,24 @@ sessions/<session_id>/state.json          this session's transcript-line waterma
 sessions/<session_id>/last_touch          epoch timestamp of this session's last hook activity, used by retention
 retention_last_run   epoch timestamp of the last retention sweep
 config.json           settings
-model-caps.json        per-model cache of whether a configured reasoning_effort was accepted (see Configuration)
+model-caps.json        per-model cache of whether a configured reasoning_effort, and whether native json_schema structured output, was accepted (see Configuration)
 debug/om.log          hook log
 last-injected.md      most recent injected summary
 ```
 
 ## Configuration
 
-Preferred: set env vars in `.claude/settings.json`'s `env` block — the same override mechanism Claude Code itself documents for `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (see Notes below), so all tuning lives in one familiar place instead of a separate file. The env var name is the config key in `OM_UPPER_SNAKE_CASE`, e.g. `observeAfterTokens` -> `OM_OBSERVE_AFTER_TOKENS`:
+Preferred: set env vars in `.claude/settings.json`'s `env` block — the same override mechanism Claude Code itself documents for `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (see Notes below), so all tuning lives in one familiar place instead of a separate file. The env var name is the config key in `OM_UPPER_SNAKE_CASE`, e.g. `observeAfterTokens` -> `OM_OBSERVE_AFTER_TOKENS`. `CLAUDE_CODE_AUTO_COMPACT_WINDOW` isn't an `OM_*` var — it's Claude Code's own setting — but it belongs in the same block since it governs the compaction cadence this plugin's observe/reflect passes are timed against:
 
 ```json
 {
   "env": {
-    "OM_OBSERVE_AFTER_TOKENS": "5000",
-    "OM_REFLECT_AFTER_TOKENS": "10000"
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000"
   }
 }
 ```
 
-Alternative: edit `~/.local/share/claude-observational-memory/config.json` directly (created on first run, values shown by `/claude-observational-memory:status`). Env vars take precedence over this file; this file takes precedence over the hardcoded defaults below.
+Alternative: edit `~/.local/share/claude-observational-memory/config.json` directly (created on first run, values shown by `/claude-observational-memory:status`) if you need to change `observeAfterTokens`, `reflectAfterTokens`, or any of the other defaults below. Env vars take precedence over this file; this file takes precedence over the hardcoded defaults below.
 
 ```json
 {
@@ -181,6 +180,8 @@ Per-provider default model, used when `llmModel` is unset:
 | `opencode-go` | none — `llmModel` is required |
 
 By default (`llmReasoningEffort` unset/`default`) the unified route never sends `reasoning_effort` at all — each model just runs in its own native mode, thinking or not. Set `llmReasoningEffort` to `low`, `medium`, or `high` to opt in; if the provider/model rejects that value, the call automatically falls back to omitting the field and caches the outcome per `llmProvider`+`llmModel`+`llmReasoningEffort` in `model-caps.json`, so it only ever probes once.
+
+Structured output goes through the same kind of probe-and-cache: every observe/reflect call has a JSON schema to enforce, and "OpenAI-compatible" doesn't mean every provider actually supports `response_format: {type: "json_schema", strict: true}` on `/chat/completions` — DeepSeek's docs only list `json_object` (`json_schema` 400s), Ollama's OpenAI-compat route silently ignores `json_schema` rather than honoring or rejecting it, and OpenRouter only passes it through for models that support it themselves. The unified route tries native `json_schema` first for any `llmProvider`+`llmModel` not already cached otherwise; on empty content back, it retries once with `response_format: {type: "json_object"}` instead and caches that per `llmProvider`+`llmModel` in `model-caps.json`, so it's a one-time cost rather than a silent permanent failure. Either way, the schema is also always spelled out as plain text in the system prompt — the only signal a provider that ignores `response_format` outright (Ollama) actually receives.
 
 ## Notes and limitations
 

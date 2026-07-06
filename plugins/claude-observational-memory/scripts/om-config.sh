@@ -156,12 +156,16 @@ om_usage_tokens_at_line() {
     2>/dev/null || printf '0'
 }
 
-# om_model_caps_file — per-"provider:model:effort" cache recording whether
-# that provider:model accepts the configured reasoning_effort value, so a
+# om_model_caps_file — per-"provider:model:effort" and per-"provider:model:schema"
+# cache recording whether that provider:model accepts the configured
+# reasoning_effort value / native response_format:json_schema, so a
 # combination that gets rejected is only ever probed once, not on every call.
-# Only populated when llmReasoningEffort is explicitly set to low/medium/high
-# — the default ("default"/unset) never sends the field, so there's nothing
-# to probe.
+# The effort entries are only populated when llmReasoningEffort is explicitly
+# set to low/medium/high — the default ("default"/unset) never sends the
+# field, so there's nothing to probe. The schema entries record "object" once
+# a provider:model has been observed to reject json_schema (see
+# om_call_model_unified) — absent means "assume json_schema works, try it
+# first".
 om_model_caps_file() { printf '%s/model-caps.json' "${OM_DIR}"; }
 
 om_model_caps_get() {
@@ -213,20 +217,46 @@ om_llm_default_model() {
   esac
 }
 
-# om_chat_body <system> <user> <schema> <model> <max_tokens> <effort>
+# om_chat_body <system> <user> <schema> <model> <max_tokens> <effort> <format>
 # Builds an OpenAI-compatible /chat/completions request body. <effort> empty
 # omits reasoning_effort entirely, for models that don't support thinking.
+# <format> selects how <schema> (if any) is enforced: "schema" sends native
+# response_format:json_schema,strict:true; "object" sends response_format:
+# json_object instead, for providers that reject or silently ignore
+# json_schema (see om_call_model_unified). Either way, whenever a schema is
+# present its JSON text is also appended to the system prompt as a plain-text
+# instruction — cheap, and the only signal a provider that ignores
+# response_format entirely (e.g. Ollama's OpenAI-compat route) actually gets.
 om_chat_body() {
-  local system="$1" user="$2" schema="$3" model="$4" max_tokens="$5" effort="$6"
+  local system="$1" user="$2" schema="$3" model="$4" max_tokens="$5" effort="$6" format="$7"
+  local sys_eff="$system"
+  [ -n "$schema" ] && sys_eff="${system}
+
+Respond with a single JSON object matching this schema, and nothing else: ${schema}"
   jq -n \
-    --arg model "$model" --arg system "$system" --arg user "$user" \
-    --argjson max_tokens "$max_tokens" --arg effort "$effort" --arg schema "$schema" \
+    --arg model "$model" --arg system "$sys_eff" --arg user "$user" \
+    --argjson max_tokens "$max_tokens" --arg effort "$effort" --arg schema "$schema" --arg format "$format" \
     '{model: $model, max_tokens: $max_tokens,
       messages: [{role:"system", content:$system}, {role:"user", content:$user}]}
      + (if $effort != "" then {reasoning_effort: $effort} else {} end)
-     + (if $schema != "" then
+     + (if $schema != "" and $format == "schema" then
           {response_format: {type:"json_schema", json_schema: {name:"om_output", strict:true, schema:($schema|fromjson)}}}
+        elif $schema != "" and $format == "object" then
+          {response_format: {type:"json_object"}}
         else {} end)' 2>/dev/null || true
+}
+
+# om_chat_request <body> <base_url> <api_key> — one request/response round
+# trip; prints the assistant's text content, or empty on any HTTP/parse
+# failure (never surfaces status codes to the caller — see
+# om_call_model_unified for how that empty result is interpreted).
+om_chat_request() {
+  local body="$1" base_url="$2" api_key="$3"
+  local resp
+  resp=$(curl -sS --max-time 60 "${base_url%/}/chat/completions" \
+    -H "Authorization: Bearer ${api_key}" -H "Content-Type: application/json" \
+    -d "$body" 2>/dev/null || true)
+  printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true
 }
 
 # om_call_model_unified <system> <user> <schema> — generic OpenAI-compatible
@@ -239,9 +269,22 @@ om_chat_body() {
 # hasn't already been cached as rejecting it, tries it first; on rejection,
 # falls back to omitting the field and caches the outcome so future calls for
 # the same provider:model:effort skip straight to the working shape.
+#
+# Structured output goes through the same probe-and-cache shape: native
+# response_format:json_schema is tried first for any provider:model not
+# already cached as rejecting it; on empty content, retries once with
+# response_format:json_object (schema spelled out in the prompt text instead)
+# and caches that so future calls for the same provider:model skip straight
+# to it. Several "OpenAI-compatible" providers don't actually support
+# json_schema on /chat/completions (DeepSeek only documents json_object;
+# Ollama's OpenAI-compat route silently ignores json_schema rather than
+# honoring or rejecting it; OpenRouter only passes it through for models that
+# support it themselves) — this makes that a one-time cost per provider:model
+# instead of a permanent silent failure.
 om_call_model_unified() {
   local system="$1" user="$2" schema="$3"
-  local provider model base_url api_key max_tokens effort cache_key caps body resp content
+  local provider model base_url api_key max_tokens effort cache_key caps body content
+  local schema_mode schema_cache_key
   provider=$(om_config_get llmProvider "openai")
   model=$(om_config_get llmModel "")
   [ -n "$model" ] || model=$(om_llm_default_model "$provider")
@@ -278,16 +321,19 @@ om_call_model_unified() {
     return 0
   fi
 
+  schema_mode="schema"
+  if [ -n "$schema" ]; then
+    schema_cache_key="${provider}:${model}:schema"
+    [ "$(om_model_caps_get "$schema_cache_key")" = "object" ] && schema_mode="object"
+  fi
+
   if [ -n "$effort" ]; then
     cache_key="${provider}:${model}:${effort}"
     caps=$(om_model_caps_get "$cache_key")
 
     if [ "$caps" != "no" ]; then
-      body=$(om_chat_body "$system" "$user" "$schema" "$model" "$max_tokens" "$effort")
-      resp=$(curl -sS --max-time 60 "${base_url%/}/chat/completions" \
-        -H "Authorization: Bearer ${api_key}" -H "Content-Type: application/json" \
-        -d "$body" 2>/dev/null || true)
-      content=$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
+      body=$(om_chat_body "$system" "$user" "$schema" "$model" "$max_tokens" "$effort" "$schema_mode")
+      content=$(om_chat_request "$body" "$base_url" "$api_key")
       if [ -n "$content" ]; then
         [ "$caps" = "yes" ] || om_model_caps_set "$cache_key" yes
         printf '%s' "$content"
@@ -298,11 +344,17 @@ om_call_model_unified() {
     fi
   fi
 
-  body=$(om_chat_body "$system" "$user" "$schema" "$model" "$max_tokens" "")
-  resp=$(curl -sS --max-time 60 "${base_url%/}/chat/completions" \
-    -H "Authorization: Bearer ${api_key}" -H "Content-Type: application/json" \
-    -d "$body" 2>/dev/null || true)
-  printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true
+  body=$(om_chat_body "$system" "$user" "$schema" "$model" "$max_tokens" "" "$schema_mode")
+  content=$(om_chat_request "$body" "$base_url" "$api_key")
+
+  if [ -z "$content" ] && [ -n "$schema" ] && [ "$schema_mode" = "schema" ]; then
+    om_log "model: ${provider}:${model} rejected structured response_format:json_schema, retrying with json_object"
+    om_model_caps_set "${provider}:${model}:schema" object
+    body=$(om_chat_body "$system" "$user" "$schema" "$model" "$max_tokens" "" "object")
+    content=$(om_chat_request "$body" "$base_url" "$api_key")
+  fi
+
+  printf '%s' "$content"
 }
 
 # om_call_model <system_prompt> <user_prompt> [json_schema]
