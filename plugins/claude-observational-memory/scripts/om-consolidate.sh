@@ -41,7 +41,7 @@ if [ "$TOTAL_LINES" -gt "$OBS_LINE" ]; then
     CHUNK=$(tail -n +"$((OBS_LINE + 1))" "$TRANSCRIPT" 2>/dev/null | head -c 60000 || true)
     if [ -n "$CHUNK" ]; then
       SCHEMA='{"type":"object","properties":{"observations":{"type":"array","items":{"type":"object","properties":{"content":{"type":"string"},"relevance":{"type":"string","enum":["low","medium","high","critical"]}},"required":["content","relevance"]}}},"required":["observations"]}'
-      SYS="You extract durable observations from a raw Claude Code session transcript (JSONL, one event per line). Each observation is one plain-text sentence describing a concrete thing that happened: a decision, a completed task, a constraint, an error, a user preference. Skip routine tool mechanics and anything obvious from file paths alone. Tag each with relevance: low, medium, high, or critical. Emit zero observations if nothing durable happened."
+      SYS="This is a simple, direct extraction task — answer immediately without extended step-by-step reasoning or deliberation. You extract durable observations from a raw Claude Code session transcript (JSONL, one event per line). Each observation is one plain-text sentence describing a concrete thing that happened: a decision, a completed task, a constraint, an error, a user preference. Skip routine tool mechanics and anything obvious from file paths alone. Tag each with relevance: low, medium, high, or critical. Emit zero observations if nothing durable happened."
       USER="Transcript chunk:
 ${CHUNK}"
       RESP=$(om_call_model "$SYS" "$USER" "$SCHEMA")
@@ -82,8 +82,9 @@ if [ "$OBSERVE_FIRED" -eq 0 ] && [ "$OBS_LINE" -gt 0 ]; then
     [ "$REFLECT_EST_TOKENS" -lt 0 ] && REFLECT_EST_TOKENS=0
 
     if [ "$REFLECT_EST_TOKENS" -ge "$REFLECT_AFTER" ]; then
-      om_run_reflect_pass "$SESSION_ID"
-      om_state_set "$SESSION_ID" reflectLine "$OBS_LINE"
+      if om_run_reflect_pass "$SESSION_ID"; then
+        om_state_set "$SESSION_ID" reflectLine "$OBS_LINE"
+      fi
     fi
   fi
 fi

@@ -150,13 +150,12 @@ Observe and reflect always call an OpenAI-compatible `/chat/completions` provide
   "env": {
     "OM_LLM_PROVIDER": "deepseek",
     "OM_LLM_API_KEY": "sk-...",
-    "OM_LLM_MODEL": "deepseek-v4-flash",
-    "OM_LLM_MAX_BUDGET_USD": "0.05"
+    "OM_LLM_MODEL": "deepseek-v4-flash"
   }
 }
 ```
 
-`OM_LLM_MODEL` and `OM_LLM_MAX_BUDGET_USD` above are shown explicitly because both have sane defaults (per-provider default model, `$0.05`) — set them only if you want to override.
+`OM_LLM_MODEL` above is shown explicitly only because every other setting has a sane default — set it (or any of the table below) only if you want to override.
 
 | Key (env var) | Default | What it does |
 |---|---|---|
@@ -164,8 +163,7 @@ Observe and reflect always call an OpenAI-compatible `/chat/completions` provide
 | `llmProvider` (`OM_LLM_PROVIDER`) | `openai` | One of `openai`, `openrouter`, `gemini`, `deepseek`, `ollama`, `opencode-go`. Resolves internally to that provider's API base URL, so you don't need to know or type one. |
 | `llmModel` (`OM_LLM_MODEL`) | per-provider, see below | Optional for every provider except `opencode-go`, whose model catalog is curated per-account (check `/models` in the `opencode` CLI or your OpenCode Zen dashboard) and so requires it explicitly. Freely override the default for any provider. |
 | `llmBaseUrl` (`OM_LLM_BASE_URL`) | resolved from `llmProvider` | Override for a provider/base URL not in the built-in list — self-hosted, a proxy, Azure OpenAI, a local vLLM server, etc. When set, `llmProvider` can be anything; it's just used as a cache-key label at that point. |
-| `llmMaxTokens` (`OM_LLM_MAX_TOKENS`) | `2048` | Output token cap for unified-route calls. |
-| `llmMaxBudgetUsd` (`OM_LLM_MAX_BUDGET_USD`) | `0.05` | Pre-call budget guard: a rough worst-case estimate (~4 chars/token on the prompt, output capped at `llmMaxTokens`, priced at a deliberately conservative flat $2/1M-token ceiling) that skips the call outright if exceeded. This is a safety net against an unexpectedly large chunk or `llmMaxTokens` value, not real billing accounting — it replaces the role the old `claude --max-budget-usd` flag played before that CLI route was dropped (see Notes below). |
+| `llmMaxTokens` (`OM_LLM_MAX_TOKENS`) | `8192` | Output token cap for unified-route calls, shared between a reasoning model's internal chain-of-thought and its actual answer. Reasoning models (e.g. `deepseek-v4-flash`) reason unconditionally regardless of `llmReasoningEffort`, and how many tokens that takes varies call to call — too low a cap and the reasoning alone can exhaust it, truncating the response (`finish_reason: "length"`) before any content is emitted at all. Logged distinctly in `debug/om.log` if it happens; raise this further if you see that message recur. |
 | `llmReasoningEffort` (`OM_LLM_REASONING_EFFORT`) | `default` | `default` never sends `reasoning_effort` at all, so the model uses its own native default — no probing, no overhead. `low`, `medium`, or `high` sends that value; if the provider rejects it, the call transparently retries once without the field and remembers the outcome in `model-caps.json`, so future calls for that `llmProvider`+`llmModel`+`llmReasoningEffort` combination skip straight to whichever shape actually works. |
 
 Per-provider default model, used when `llmModel` is unset:

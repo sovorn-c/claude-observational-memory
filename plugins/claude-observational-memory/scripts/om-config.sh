@@ -249,14 +249,25 @@ Respond with a single JSON object matching this schema, and nothing else: ${sche
 # om_chat_request <body> <base_url> <api_key> — one request/response round
 # trip; prints the assistant's text content, or empty on any HTTP/parse
 # failure (never surfaces status codes to the caller — see
-# om_call_model_unified for how that empty result is interpreted).
+# om_call_model_unified for how that empty result is interpreted). Reasoning
+# models (e.g. deepseek-v4-flash) spend an unpredictable, sometimes large,
+# share of max_tokens on internal chain-of-thought before ever emitting
+# content — if that reasoning alone exhausts max_tokens, finish_reason comes
+# back "length" with message.content empty. That's a truncation, not the
+# model legitimately finding nothing to say, so it's logged distinctly
+# instead of looking identical to a genuine empty result.
 om_chat_request() {
   local body="$1" base_url="$2" api_key="$3"
-  local resp
+  local resp content finish_reason
   resp=$(curl -sS --max-time 60 "${base_url%/}/chat/completions" \
     -H "Authorization: Bearer ${api_key}" -H "Content-Type: application/json" \
     -d "$body" 2>/dev/null || true)
-  printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true
+  content=$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
+  if [ -z "$content" ]; then
+    finish_reason=$(printf '%s' "$resp" | jq -r '.choices[0].finish_reason // empty' 2>/dev/null || true)
+    [ "$finish_reason" = "length" ] && om_log "model: response truncated (finish_reason=length) before any content was emitted — raise llmMaxTokens if this recurs"
+  fi
+  printf '%s' "$content"
 }
 
 # om_call_model_unified <system> <user> <schema> — generic OpenAI-compatible
@@ -291,7 +302,7 @@ om_call_model_unified() {
   base_url=$(om_config_get llmBaseUrl "")
   [ -n "$base_url" ] || base_url=$(om_llm_base_url "$provider")
   api_key=$(om_config_get llmApiKey "")
-  max_tokens=$(om_config_get llmMaxTokens 2048)
+  max_tokens=$(om_config_get llmMaxTokens 8192)
   effort=$(om_config_get llmReasoningEffort "default")
   case "$effort" in
     low|medium|high) ;;
@@ -300,23 +311,6 @@ om_call_model_unified() {
 
   if [ -z "$base_url" ] || [ -z "$model" ]; then
     om_log "model: llmProvider '$provider' unrecognized and no llmBaseUrl/llmModel set"
-    printf ''
-    return 0
-  fi
-
-  # Pre-call budget guard: a rough worst-case estimate (~4 chars/token, output
-  # capped at max_tokens) against a deliberately conservative flat ceiling
-  # ($2/1M tokens - safely above priciest small models we default to, and a
-  # large overestimate for cheap ones). Not real billing accounting - just a
-  # safety net against an unexpectedly large chunk or max_tokens value, same
-  # role the dropped `claude --max-budget-usd` flag used to play.
-  local budget est_tokens over_budget
-  budget=$(om_config_get llmMaxBudgetUsd 0.05)
-  est_tokens=$(( (${#system} + ${#user}) / 4 + max_tokens ))
-  over_budget=$(jq -n --argjson tokens "$est_tokens" --argjson budget "$budget" \
-    '($tokens * 0.000002) > $budget' 2>/dev/null || echo false)
-  if [ "$over_budget" = "true" ]; then
-    om_log "model: estimated worst-case cost for ~${est_tokens} tokens exceeds llmMaxBudgetUsd (\$${budget}); skipping call"
     printf ''
     return 0
   fi
@@ -378,7 +372,13 @@ om_call_model() {
 # om_run_reflect_pass <session_id> — distill this session's own observations
 # (its own file — no filtering needed) not yet reflected into new reflections.
 # Safe/cheap to call repeatedly; no-ops below a minimum batch size. On
-# success, triggers dropper maintenance.
+# success, triggers dropper maintenance. Returns 1 (rather than the usual
+# always-0) only when the model call itself failed to return usable content
+# (empty/truncated) — every other early exit (nothing to reflect, below
+# minimum batch size, zero reflections legitimately decided) returns 0. The
+# caller (om-consolidate.sh) uses this to avoid advancing its reflect
+# watermark on a failed attempt, so the same window is retried at the next
+# opportunity instead of waiting through another full growth threshold.
 om_run_reflect_pass() {
   local sid="${1:-default}"
   local obs_file refl_file
@@ -401,12 +401,15 @@ om_run_reflect_pass() {
   [ "${count:-0}" -lt 3 ] && return 0
 
   local schema='{"type":"object","properties":{"reflections":{"type":"array","items":{"type":"object","properties":{"content":{"type":"string"},"supportingObservationIds":{"type":"array","items":{"type":"string"}}},"required":["content","supportingObservationIds"]}}},"required":["reflections"]}'
-  local sys="You distill Claude Code session observations (JSONL, each with an id) into durable reflections: stable facts about the user, project, decisions, and constraints that a future session would need. Skip anything transient or already covered by an existing reflection. Cite only real observation ids from the input in supportingObservationIds. Emit zero reflections if nothing is durable enough."
+  local sys="This is a simple, direct distillation task — answer immediately without extended step-by-step reasoning or deliberation. You distill Claude Code session observations (JSONL, each with an id) into durable reflections: stable facts about the user, project, decisions, and constraints that a future session would need. Skip anything transient or already covered by an existing reflection. Cite only real observation ids from the input in supportingObservationIds. Emit zero reflections if nothing is durable enough."
   local user="Observations:
 ${obs_jsonl}"
   local resp
   resp=$(om_call_model "$sys" "$user" "$schema")
-  [ -z "$resp" ] && return 0
+  if [ -z "$resp" ]; then
+    om_log "reflect: model call returned no usable content for $count observations (session $sid); not advancing watermark, will retry next opportunity"
+    return 1
+  fi
 
   local allowed_ids
   allowed_ids=$(printf '%s\n' "$obs_jsonl" | jq -s '[.[].id]' 2>/dev/null || echo '[]')
