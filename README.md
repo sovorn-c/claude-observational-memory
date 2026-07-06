@@ -100,7 +100,7 @@ sessions/<session_id>/state.json          this session's transcript-line waterma
 sessions/<session_id>/last_touch          epoch timestamp of this session's last hook activity, used by retention
 retention_last_run   epoch timestamp of the last retention sweep
 config.json           settings
-model-caps.json        per-model cache of whether the unified LLM route's reasoning_effort probe succeeded (see Configuration)
+model-caps.json        per-model cache of whether a configured reasoning_effort was accepted (see Configuration)
 debug/om.log          hook log
 last-injected.md      most recent injected summary
 ```
@@ -167,6 +167,7 @@ Observe and reflect always call an OpenAI-compatible `/chat/completions` provide
 | `llmBaseUrl` (`OM_LLM_BASE_URL`) | resolved from `llmProvider` | Override for a provider/base URL not in the built-in list — self-hosted, a proxy, Azure OpenAI, a local vLLM server, etc. When set, `llmProvider` can be anything; it's just used as a cache-key label at that point. |
 | `llmMaxTokens` (`OM_LLM_MAX_TOKENS`) | `2048` | Output token cap for unified-route calls. |
 | `llmMaxBudgetUsd` (`OM_LLM_MAX_BUDGET_USD`) | `0.05` | Pre-call budget guard: a rough worst-case estimate (~4 chars/token on the prompt, output capped at `llmMaxTokens`, priced at a deliberately conservative flat $2/1M-token ceiling) that skips the call outright if exceeded. This is a safety net against an unexpectedly large chunk or `llmMaxTokens` value, not real billing accounting — it replaces the role the old `claude --max-budget-usd` flag played before that CLI route was dropped (see Notes below). |
+| `llmReasoningEffort` (`OM_LLM_REASONING_EFFORT`) | `default` | `default` never sends `reasoning_effort` at all, so the model uses its own native default — no probing, no overhead. `low`, `medium`, or `high` sends that value; if the provider rejects it, the call transparently retries once without the field and remembers the outcome in `model-caps.json`, so future calls for that `llmProvider`+`llmModel`+`llmReasoningEffort` combination skip straight to whichever shape actually works. |
 
 Per-provider default model, used when `llmModel` is unset:
 
@@ -179,7 +180,7 @@ Per-provider default model, used when `llmModel` is unset:
 | `ollama` | `llama3.2` |
 | `opencode-go` | none — `llmModel` is required |
 
-For reasoning/thinking-capable models, the unified route automatically sends `reasoning_effort: "high"` — no separate setting needed. The first call for a given `llmProvider`+`llmModel` pair tries this and, if the provider rejects it, transparently retries once without the field and remembers the result in `model-caps.json`; every subsequent call for that pair skips straight to whichever shape actually works. Switching to a non-thinking model never breaks observe/reflect — it just stops sending a field the provider doesn't understand.
+By default (`llmReasoningEffort` unset/`default`) the unified route never sends `reasoning_effort` at all — each model just runs in its own native mode, thinking or not. Set `llmReasoningEffort` to `low`, `medium`, or `high` to opt in; if the provider/model rejects that value, the call automatically falls back to omitting the field and caches the outcome per `llmProvider`+`llmModel`+`llmReasoningEffort` in `model-caps.json`, so it only ever probes once.
 
 ## Notes and limitations
 

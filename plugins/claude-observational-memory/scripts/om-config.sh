@@ -156,11 +156,12 @@ om_usage_tokens_at_line() {
     2>/dev/null || printf '0'
 }
 
-# om_model_caps_file — per-"provider:model" cache recording whether that
-# model accepts a reasoning/thinking parameter, so a model that doesn't
-# support it is only ever probed once, not on every call. Keyed by provider
-# too since the same model name can exist on multiple providers with
-# different capabilities.
+# om_model_caps_file — per-"provider:model:effort" cache recording whether
+# that provider:model accepts the configured reasoning_effort value, so a
+# combination that gets rejected is only ever probed once, not on every call.
+# Only populated when llmReasoningEffort is explicitly set to low/medium/high
+# — the default ("default"/unset) never sends the field, so there's nothing
+# to probe.
 om_model_caps_file() { printf '%s/model-caps.json' "${OM_DIR}"; }
 
 om_model_caps_get() {
@@ -231,13 +232,16 @@ om_chat_body() {
 # om_call_model_unified <system> <user> <schema> — generic OpenAI-compatible
 # /chat/completions route. Resolves `llmProvider` (default "openai") to a
 # base URL and default model internally, so the user only has to set
-# llmProvider, llmModel (optional), and llmApiKey. Tries reasoning_effort:"high" first
-# (unless this provider:model is already cached as unsupported); on failure,
-# retries once without it and caches the result so future calls for the same
-# provider:model skip the probe.
+# llmProvider, llmModel (optional), and llmApiKey. `llmReasoningEffort`
+# (default "default") controls reasoning_effort: "default" omits the field
+# entirely so the model uses its own native default — no probing, zero
+# overhead. "low"/"medium"/"high" sends that value and, if this provider:model
+# hasn't already been cached as rejecting it, tries it first; on rejection,
+# falls back to omitting the field and caches the outcome so future calls for
+# the same provider:model:effort skip straight to the working shape.
 om_call_model_unified() {
   local system="$1" user="$2" schema="$3"
-  local provider model base_url api_key max_tokens cache_key caps body resp content
+  local provider model base_url api_key max_tokens effort cache_key caps body resp content
   provider=$(om_config_get llmProvider "openai")
   model=$(om_config_get llmModel "")
   [ -n "$model" ] || model=$(om_llm_default_model "$provider")
@@ -245,6 +249,11 @@ om_call_model_unified() {
   [ -n "$base_url" ] || base_url=$(om_llm_base_url "$provider")
   api_key=$(om_config_get llmApiKey "")
   max_tokens=$(om_config_get llmMaxTokens 2048)
+  effort=$(om_config_get llmReasoningEffort "default")
+  case "$effort" in
+    low|medium|high) ;;
+    *) effort="" ;;
+  esac
 
   if [ -z "$base_url" ] || [ -z "$model" ]; then
     om_log "model: llmProvider '$provider' unrecognized and no llmBaseUrl/llmModel set"
@@ -269,22 +278,24 @@ om_call_model_unified() {
     return 0
   fi
 
-  cache_key="${provider}:${model}"
-  caps=$(om_model_caps_get "$cache_key")
+  if [ -n "$effort" ]; then
+    cache_key="${provider}:${model}:${effort}"
+    caps=$(om_model_caps_get "$cache_key")
 
-  if [ "$caps" != "no" ]; then
-    body=$(om_chat_body "$system" "$user" "$schema" "$model" "$max_tokens" "high")
-    resp=$(curl -sS --max-time 60 "${base_url%/}/chat/completions" \
-      -H "Authorization: Bearer ${api_key}" -H "Content-Type: application/json" \
-      -d "$body" 2>/dev/null || true)
-    content=$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
-    if [ -n "$content" ]; then
-      [ "$caps" = "yes" ] || om_model_caps_set "$cache_key" yes
-      printf '%s' "$content"
-      return 0
+    if [ "$caps" != "no" ]; then
+      body=$(om_chat_body "$system" "$user" "$schema" "$model" "$max_tokens" "$effort")
+      resp=$(curl -sS --max-time 60 "${base_url%/}/chat/completions" \
+        -H "Authorization: Bearer ${api_key}" -H "Content-Type: application/json" \
+        -d "$body" 2>/dev/null || true)
+      content=$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
+      if [ -n "$content" ]; then
+        [ "$caps" = "yes" ] || om_model_caps_set "$cache_key" yes
+        printf '%s' "$content"
+        return 0
+      fi
+      om_model_caps_set "$cache_key" no
+      om_log "model: $cache_key rejected reasoning_effort=$effort, retrying without it"
     fi
-    om_model_caps_set "$cache_key" no
-    om_log "model: $cache_key rejected reasoning_effort, retrying without it"
   fi
 
   body=$(om_chat_body "$system" "$user" "$schema" "$model" "$max_tokens" "")
