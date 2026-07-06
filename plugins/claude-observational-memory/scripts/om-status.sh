@@ -44,7 +44,8 @@ if [ -n "$llm_key" ]; then
   [ -n "$llm_model" ] || llm_model=$(om_llm_default_model "$llm_provider")
   llm_base_url=$(om_config_get llmBaseUrl "")
   [ -n "$llm_base_url" ] || llm_base_url=$(om_llm_base_url "$llm_provider")
-  echo "  model route:  unified LLM (${llm_provider}: ${llm_model:-?} via ${llm_base_url:-?})"
+  llm_budget=$(om_config_get llmMaxBudgetUsd 0.05)
+  echo "  model route:  unified LLM (${llm_provider}: ${llm_model:-?} via ${llm_base_url:-?}, max budget \$${llm_budget}/call)"
 else
   echo "  model route:  NOT CONFIGURED — set llmApiKey to enable observe/reflect"
 fi

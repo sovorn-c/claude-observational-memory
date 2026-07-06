@@ -195,15 +195,18 @@ om_llm_base_url() {
 }
 
 # om_llm_default_model <provider> — used only when `llmModel` is unset, so
-# setting just `llmProvider` + `llmApiKey` works out of the box. `opencode-go`
-# has no default: its model catalog is curated per-account (see `/models` in
-# the opencode CLI), so `llmModel` must be set explicitly for that provider.
+# setting just `llmProvider` + `llmApiKey` works out of the box (override any
+# entry any time via `llmModel`/`OM_LLM_MODEL`). `opencode-go` has no default:
+# its model catalog is curated per-account (see `/models` in the opencode
+# CLI), so `llmModel` must be set explicitly for that provider.
 om_llm_default_model() {
   case "$1" in
     openai)     printf 'gpt-5.4-nano' ;;
     openrouter) printf 'meta-llama/llama-3.1-8b-instruct' ;;
     gemini)     printf 'gemini-3.1-flash-lite' ;;
-    deepseek)   printf 'deepseek-chat' ;;
+    # deepseek-chat is deprecated 2026-07-24 in favor of deepseek-v4-flash
+    # (same non-thinking model, renamed) — see api-docs.deepseek.com.
+    deepseek)   printf 'deepseek-v4-flash' ;;
     ollama)     printf 'llama3.2' ;;
     *)          printf '' ;;
   esac
@@ -245,6 +248,23 @@ om_call_model_unified() {
 
   if [ -z "$base_url" ] || [ -z "$model" ]; then
     om_log "model: llmProvider '$provider' unrecognized and no llmBaseUrl/llmModel set"
+    printf ''
+    return 0
+  fi
+
+  # Pre-call budget guard: a rough worst-case estimate (~4 chars/token, output
+  # capped at max_tokens) against a deliberately conservative flat ceiling
+  # ($2/1M tokens - safely above priciest small models we default to, and a
+  # large overestimate for cheap ones). Not real billing accounting - just a
+  # safety net against an unexpectedly large chunk or max_tokens value, same
+  # role the dropped `claude --max-budget-usd` flag used to play.
+  local budget est_tokens over_budget
+  budget=$(om_config_get llmMaxBudgetUsd 0.05)
+  est_tokens=$(( (${#system} + ${#user}) / 4 + max_tokens ))
+  over_budget=$(jq -n --argjson tokens "$est_tokens" --argjson budget "$budget" \
+    '($tokens * 0.000002) > $budget' 2>/dev/null || echo false)
+  if [ "$over_budget" = "true" ]; then
+    om_log "model: estimated worst-case cost for ~${est_tokens} tokens exceeds llmMaxBudgetUsd (\$${budget}); skipping call"
     printf ''
     return 0
   fi

@@ -1,6 +1,6 @@
 {
   "name": "claude-observational-memory",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Observational memory for Claude Code: observe, reflect, inject, recall.",
   "author": { "name": "sovorn-c" },
   "license": "MIT"

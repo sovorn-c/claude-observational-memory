@@ -128,8 +128,7 @@ Alternative: edit `~/.local/share/claude-observational-memory/config.json` direc
   "reflectAfterTokens": 10000,
   "sessionRetentionDays": 30,
   "reflectOnPreCompact": true,
-  "injectOnSessionStart": true,
-  "model": "claude-haiku-4-5-20251001"
+  "injectOnSessionStart": true
 }
 ```
 
@@ -151,18 +150,23 @@ Observe and reflect always call an OpenAI-compatible `/chat/completions` provide
 {
   "env": {
     "OM_LLM_PROVIDER": "deepseek",
-    "OM_LLM_API_KEY": "sk-..."
+    "OM_LLM_API_KEY": "sk-...",
+    "OM_LLM_MODEL": "deepseek-v4-flash",
+    "OM_LLM_MAX_BUDGET_USD": "0.05"
   }
 }
 ```
+
+`OM_LLM_MODEL` and `OM_LLM_MAX_BUDGET_USD` above are shown explicitly because both have sane defaults (per-provider default model, `$0.05`) — set them only if you want to override.
 
 | Key (env var) | Default | What it does |
 |---|---|---|
 | `llmApiKey` (`OM_LLM_API_KEY`) | unset | **Required.** Observe/reflect no-op until this is set. Env-only — never written to `config.json` by `om_config_init`, so a secret never ends up in a plain file just from running the plugin. |
 | `llmProvider` (`OM_LLM_PROVIDER`) | `openai` | One of `openai`, `openrouter`, `gemini`, `deepseek`, `ollama`, `opencode-go`. Resolves internally to that provider's API base URL, so you don't need to know or type one. |
-| `llmModel` (`OM_LLM_MODEL`) | per-provider, see below | Optional for every provider except `opencode-go`, whose model catalog is curated per-account (check `/models` in the `opencode` CLI or your OpenCode Zen dashboard) and so requires it explicitly. |
+| `llmModel` (`OM_LLM_MODEL`) | per-provider, see below | Optional for every provider except `opencode-go`, whose model catalog is curated per-account (check `/models` in the `opencode` CLI or your OpenCode Zen dashboard) and so requires it explicitly. Freely override the default for any provider. |
 | `llmBaseUrl` (`OM_LLM_BASE_URL`) | resolved from `llmProvider` | Override for a provider/base URL not in the built-in list — self-hosted, a proxy, Azure OpenAI, a local vLLM server, etc. When set, `llmProvider` can be anything; it's just used as a cache-key label at that point. |
 | `llmMaxTokens` (`OM_LLM_MAX_TOKENS`) | `2048` | Output token cap for unified-route calls. |
+| `llmMaxBudgetUsd` (`OM_LLM_MAX_BUDGET_USD`) | `0.05` | Pre-call budget guard: a rough worst-case estimate (~4 chars/token on the prompt, output capped at `llmMaxTokens`, priced at a deliberately conservative flat $2/1M-token ceiling) that skips the call outright if exceeded. This is a safety net against an unexpectedly large chunk or `llmMaxTokens` value, not real billing accounting — it replaces the role the old `claude --max-budget-usd` flag played before that CLI route was dropped (see Notes below). |
 
 Per-provider default model, used when `llmModel` is unset:
 
@@ -171,7 +175,7 @@ Per-provider default model, used when `llmModel` is unset:
 | `openai` | `gpt-5.4-nano` |
 | `openrouter` | `meta-llama/llama-3.1-8b-instruct` |
 | `gemini` | `gemini-3.1-flash-lite` |
-| `deepseek` | `deepseek-chat` |
+| `deepseek` | `deepseek-v4-flash` (`deepseek-chat` is deprecated 2026-07-24 — same model, renamed) |
 | `ollama` | `llama3.2` |
 | `opencode-go` | none — `llmModel` is required |
 
