@@ -44,7 +44,7 @@ if [ "$TOTAL_LINES" -gt "$OBS_LINE" ]; then
       SYS="You extract durable observations from a raw Claude Code session transcript (JSONL, one event per line). Each observation is one plain-text sentence describing a concrete thing that happened: a decision, a completed task, a constraint, an error, a user preference. Skip routine tool mechanics and anything obvious from file paths alone. Tag each with relevance: low, medium, high, or critical. Emit zero observations if nothing durable happened."
       USER="Transcript chunk:
 ${CHUNK}"
-      RESP=$(om_call_model "$SYS" "$USER" 0.03 "$SCHEMA")
+      RESP=$(om_call_model "$SYS" "$USER" "$SCHEMA")
       COUNT_ADDED=0
       if [ -n "$RESP" ]; then
         NOW=$(date -u +%FT%TZ)

@@ -28,11 +28,19 @@ This repo is a Claude Code **marketplace** named `sovorn-c-om` containing one pl
 
 After install, restart the session so hooks register.
 
+**Updating:** third-party marketplaces like this one do **not** auto-update by default — Claude Code only auto-updates official Anthropic marketplaces unless you opt in. To pick up fixes/changes:
+
+```text
+/plugin marketplace update sovorn-c-om
+/reload-plugins
+```
+
+Or enable it once so future updates are automatic: `/plugin` → **Marketplaces** → `sovorn-c-om` → **Enable auto-update**.
+
 ## Requirements
 
-- `bash`, `jq`, `openssl` (id generation)
-- Claude Code CLI (`claude`) on PATH — required for observe/reflect unless the unified LLM route (see Configuration) is configured instead
-- `curl` — only required if using the unified LLM route
+- `bash`, `jq`, `openssl` (id generation), `curl` (LLM calls)
+- An API key from an OpenAI-compatible LLM provider, set as `llmApiKey` (see Configuration) — required for observe/reflect to run at all. [DeepSeek](https://api-docs.deepseek.com/) and [OpenCode Zen](https://opencode.ai/) (`opencode-go`) are cheap options to start with.
 
 ## Commands
 
@@ -53,7 +61,7 @@ flowchart TD
     end
     Commands["/recall, /status commands"]
 
-    Model{{"claude CLI or<br/>unified LLM route"}}
+    Model{{"unified LLM route<br/>(OpenAI-compatible API)"}}
     Consolidate("Consolidate engine<br/>observe → reflect → dropper → retention")
     Session(["Session context"])
     Inject("Inject engine")
@@ -127,7 +135,6 @@ Alternative: edit `~/.local/share/claude-observational-memory/config.json` direc
 
 | Key | Env var | Default | What it does |
 |---|---|---|---|
-| `model` | `OM_MODEL` | `claude-haiku-4-5-20251001` | Model for observe/reflect via `claude -p --model <model>`. Ignored when the unified LLM route is active. Defaults to something cheap/fast since these calls run automatically in the background, not at your main session's rate. |
 | `observeAfterTokens` | `OM_OBSERVE_AFTER_TOKENS` | `5000` | Real token growth (from each turn's recorded `usage`, not an estimate) that triggers an observe pass. Lower = more frequent, smaller model calls. |
 | `reflectAfterTokens` | `OM_REFLECT_AFTER_TOKENS` | `10000` | Real token growth of already-observed-but-unreflected content that triggers a reflect pass. |
 | `observationsPoolTargetTokens` | `OM_OBSERVATIONS_POOL_TARGET_TOKENS` | `4000` | Steady-state size the dropper archives the active pool back down to after a successful reflect pass. Keep well below `observationsPoolMaxTokens`. |
@@ -138,13 +145,12 @@ Alternative: edit `~/.local/share/claude-observational-memory/config.json` direc
 
 ### Unified LLM route
 
-By default, observe and reflect both call the `claude` CLI (`claude -p --model <model>`). Since these fire far more often than an interactive prompt, you can instead point them at any OpenAI-compatible `/chat/completions` provider — just set three env vars:
+Observe and reflect always call an OpenAI-compatible `/chat/completions` provider — there is no bundled fallback, so `llmApiKey` must be set or observe/reflect silently no-op (logged to `debug/om.log`, never a hard failure). [DeepSeek](https://api-docs.deepseek.com/) and [OpenCode Zen](https://opencode.ai/) (`opencode-go`) are good picks to start with: both are cheap, and neither requires the OAuth/subscription juggling that trying to shell out to the `claude` CLI for this would (see Notes below for why that route was dropped). Just set:
 
 ```json
 {
   "env": {
     "OM_LLM_PROVIDER": "deepseek",
-    "OM_LLM_MODEL": "deepseek-v4-flash",
     "OM_LLM_API_KEY": "sk-..."
   }
 }
@@ -152,11 +158,11 @@ By default, observe and reflect both call the `claude` CLI (`claude -p --model <
 
 | Key (env var) | Default | What it does |
 |---|---|---|
-| `llmApiKey` (`OM_LLM_API_KEY`) | unset | Switches both observe and reflect to the unified route when non-empty. Unset keeps using the `claude` CLI. Env-only — never written to `config.json` by `om_config_init`, so a secret never ends up in a plain file just from running the plugin. |
+| `llmApiKey` (`OM_LLM_API_KEY`) | unset | **Required.** Observe/reflect no-op until this is set. Env-only — never written to `config.json` by `om_config_init`, so a secret never ends up in a plain file just from running the plugin. |
 | `llmProvider` (`OM_LLM_PROVIDER`) | `openai` | One of `openai`, `openrouter`, `gemini`, `deepseek`, `ollama`, `opencode-go`. Resolves internally to that provider's API base URL, so you don't need to know or type one. |
 | `llmModel` (`OM_LLM_MODEL`) | per-provider, see below | Optional for every provider except `opencode-go`, whose model catalog is curated per-account (check `/models` in the `opencode` CLI or your OpenCode Zen dashboard) and so requires it explicitly. |
 | `llmBaseUrl` (`OM_LLM_BASE_URL`) | resolved from `llmProvider` | Override for a provider/base URL not in the built-in list — self-hosted, a proxy, Azure OpenAI, a local vLLM server, etc. When set, `llmProvider` can be anything; it's just used as a cache-key label at that point. |
-| `llmMaxTokens` (`OM_LLM_MAX_TOKENS`) | `2048` | Output token cap for unified-route calls only (the `claude` CLI route uses `max-budget-usd` instead). |
+| `llmMaxTokens` (`OM_LLM_MAX_TOKENS`) | `2048` | Output token cap for unified-route calls. |
 
 Per-provider default model, used when `llmModel` is unset:
 
@@ -165,7 +171,7 @@ Per-provider default model, used when `llmModel` is unset:
 | `openai` | `gpt-5.4-nano` |
 | `openrouter` | `meta-llama/llama-3.1-8b-instruct` |
 | `gemini` | `gemini-3.1-flash-lite` |
-| `deepseek` | `deepseek-v4-flash` |
+| `deepseek` | `deepseek-chat` |
 | `ollama` | `llama3.2` |
 | `opencode-go` | none — `llmModel` is required |
 
@@ -178,6 +184,7 @@ For reasoning/thinking-capable models, the unified route automatically sends `re
 - This is a file-backed design, not an integration with Claude Code's own context ledger — plugins can't read that ledger or trigger compaction themselves, only react to it.
 - The dropper is deterministic (oldest-covered-first), not model-judged — cheaper than asking a model which observations are safe to remove, at the cost of nuance (it can't choose to keep an old-but-still-load-bearing observation just because it's technically covered).
 - The unified LLM route assumes an OpenAI-compatible `/chat/completions` shape; a provider with a different auth header or response envelope needs changes to `om_call_model_unified` in `scripts/om-config.sh`.
+- Earlier versions shelled out to the `claude` CLI (`claude -p --bare ...`) for observe/reflect, piggybacking on Claude Code's own auth. That was dropped: `--bare` mode — needed to keep each call small and cheap — explicitly disables OAuth/keychain auth and requires `ANTHROPIC_API_KEY` regardless (per Claude Code's own docs), so it was never actually free of a separate API key; and without `--bare`, plain `claude -p` reloads hooks/skills/plugins/CLAUDE.md on every call, tens of thousands of tokens of fixed overhead for what's otherwise a small extraction prompt. The unified LLM route avoids both problems.
 
 ## License
 

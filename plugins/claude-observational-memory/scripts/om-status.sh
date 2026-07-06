@@ -46,6 +46,6 @@ if [ -n "$llm_key" ]; then
   [ -n "$llm_base_url" ] || llm_base_url=$(om_llm_base_url "$llm_provider")
   echo "  model route:  unified LLM (${llm_provider}: ${llm_model:-?} via ${llm_base_url:-?})"
 else
-  echo "  model route:  claude CLI ($(om_config_get model claude-haiku-4-5-20251001))"
+  echo "  model route:  NOT CONFIGURED — set llmApiKey to enable observe/reflect"
 fi
 exit 0

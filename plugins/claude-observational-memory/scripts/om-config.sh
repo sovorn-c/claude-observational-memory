@@ -52,8 +52,7 @@ om_config_init() {
   "reflectAfterTokens": 10000,
   "sessionRetentionDays": 30,
   "reflectOnPreCompact": true,
-  "injectOnSessionStart": true,
-  "model": "claude-haiku-4-5-20251001"
+  "injectOnSessionStart": true
 }
 JSON
   fi
@@ -227,10 +226,9 @@ om_chat_body() {
 }
 
 # om_call_model_unified <system> <user> <schema> — generic OpenAI-compatible
-# /chat/completions route, used instead of the `claude` CLI when `llmApiKey`
-# is configured. Resolves `llmProvider` (default "openai") to a base URL and
-# default model internally, so the user only has to set llmProvider,
-# llmModel (optional), and llmApiKey. Tries reasoning_effort:"high" first
+# /chat/completions route. Resolves `llmProvider` (default "openai") to a
+# base URL and default model internally, so the user only has to set
+# llmProvider, llmModel (optional), and llmApiKey. Tries reasoning_effort:"high" first
 # (unless this provider:model is already cached as unsupported); on failure,
 # retries once without it and caches the result so future calls for the same
 # provider:model skip the probe.
@@ -276,30 +274,22 @@ om_call_model_unified() {
   printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true
 }
 
-# om_call_model <system_prompt> <user_prompt> <max_budget_usd> [json_schema]
+# om_call_model <system_prompt> <user_prompt> [json_schema]
 # Prints the model's raw text response, or empty on any failure. Never fails
-# the caller — always safe to use in `set -e` scripts. Routes to a generic
-# OpenAI-compatible endpoint when `llmApiKey` is set, otherwise to the
-# `claude` CLI.
+# the caller — always safe to use in `set -e` scripts. Always routes through
+# the unified OpenAI-compatible endpoint; requires `llmApiKey` to be set.
 om_call_model() {
-  local system="$1" user="$2" budget="${3:-0.03}" schema="${4:-}"
+  local system="$1" user="$2" schema="${3:-}"
   local api_key
   api_key=$(om_config_get llmApiKey "")
-  if [ -n "$api_key" ]; then
-    command -v curl >/dev/null 2>&1 || { om_log "model: curl not found for unified LLM route"; return 0; }
-    om_call_model_unified "$system" "$user" "$schema" \
-      | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+  if [ -z "$api_key" ]; then
+    om_log "model: llmApiKey not set; observe/reflect disabled"
+    printf ''
     return 0
   fi
-
-  command -v claude >/dev/null 2>&1 || { om_log "model: claude CLI not found"; return 0; }
-  local model
-  model=$(om_config_get model claude-haiku-4-5-20251001)
-  local args=(-p --bare --model "$model" --system-prompt "$system" --tools "" \
-    --no-session-persistence --max-budget-usd "$budget" --output-format text)
-  [ -n "$schema" ] && args+=(--json-schema "$schema")
-  printf '%s' "$user" | claude "${args[@]}" 2>/dev/null \
-    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true
+  command -v curl >/dev/null 2>&1 || { om_log "model: curl not found for unified LLM route"; return 0; }
+  om_call_model_unified "$system" "$user" "$schema" \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
 # om_run_reflect_pass <session_id> — distill this session's own observations
@@ -332,7 +322,7 @@ om_run_reflect_pass() {
   local user="Observations:
 ${obs_jsonl}"
   local resp
-  resp=$(om_call_model "$sys" "$user" 0.05 "$schema")
+  resp=$(om_call_model "$sys" "$user" "$schema")
   [ -z "$resp" ] && return 0
 
   local allowed_ids
