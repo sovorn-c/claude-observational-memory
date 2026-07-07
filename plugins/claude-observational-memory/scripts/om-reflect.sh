@@ -17,8 +17,4 @@ SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // "default"' 2>/dev/null
 om_session_init "$SESSION_ID"
 
 om_run_reflect_pass "$SESSION_ID"
-if [ "${OM_LAST_REFLECT_ADDED:-0}" -gt 0 ]; then
-  jq -nc --arg n "$OM_LAST_REFLECT_ADDED" \
-    '{systemMessage: ("Observational memory: reflector run (" + $n + " new reflection" + (if $n == "1" then "" else "s" end) + ")")}'
-fi
 exit 0

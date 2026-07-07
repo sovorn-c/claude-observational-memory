@@ -62,9 +62,6 @@ ${CHUNK}"
         done < <(printf '%s' "$RESP" | jq -c '.observations[]?' 2>/dev/null || true)
       fi
       om_log "observe: chunk ~${EST_TOKENS} tokens, ${COUNT_ADDED} observation(s) recorded (session $SESSION_ID)"
-      if [ "$COUNT_ADDED" -gt 0 ]; then
-        SYSTEM_MSG="Observational memory: observer run (${COUNT_ADDED} new observation$([ "$COUNT_ADDED" -eq 1 ] && echo "" || echo "s"))"
-      fi
     fi
     om_state_set "$SESSION_ID" observeLine "$TOTAL_LINES"
     OBS_LINE="$TOTAL_LINES"
@@ -87,17 +84,10 @@ if [ "$OBSERVE_FIRED" -eq 0 ] && [ "$OBS_LINE" -gt 0 ]; then
     if [ "$REFLECT_EST_TOKENS" -ge "$REFLECT_AFTER" ]; then
       if om_run_reflect_pass "$SESSION_ID"; then
         om_state_set "$SESSION_ID" reflectLine "$OBS_LINE"
-        if [ "${OM_LAST_REFLECT_ADDED:-0}" -gt 0 ]; then
-          SYSTEM_MSG="Observational memory: reflector run (${OM_LAST_REFLECT_ADDED} new reflection$([ "$OM_LAST_REFLECT_ADDED" -eq 1 ] && echo "" || echo "s"))"
-        fi
       fi
     fi
   fi
 fi
 
 om_run_retention_pass
-
-if [ -n "${SYSTEM_MSG:-}" ]; then
-  jq -nc --arg msg "$SYSTEM_MSG" '{systemMessage: $msg}'
-fi
 exit 0
