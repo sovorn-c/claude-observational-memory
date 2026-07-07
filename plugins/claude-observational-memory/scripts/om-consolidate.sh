@@ -38,7 +38,7 @@ if [ "$TOTAL_LINES" -gt "$OBS_LINE" ]; then
   [ "$EST_TOKENS" -lt 0 ] && EST_TOKENS=0
 
   if [ "$EST_TOKENS" -ge "$OBSERVE_AFTER" ]; then
-    CHUNK=$(tail -n +"$((OBS_LINE + 1))" "$TRANSCRIPT" 2>/dev/null | head -c 60000 || true)
+    CHUNK=$(tail -n +"$((OBS_LINE + 1))" "$TRANSCRIPT" 2>/dev/null || true)
     if [ -n "$CHUNK" ]; then
       SCHEMA='{"type":"object","properties":{"observations":{"type":"array","items":{"type":"object","properties":{"content":{"type":"string"},"relevance":{"type":"string","enum":["low","medium","high","critical"]}},"required":["content","relevance"]}}},"required":["observations"]}'
       SYS="This is a simple, direct extraction task — answer immediately without extended step-by-step reasoning or deliberation. You extract durable observations from a raw Claude Code session transcript (JSONL, one event per line). Each observation is one plain-text sentence describing a concrete thing that happened: a decision, a completed task, a constraint, an error, a user preference. Skip routine tool mechanics and anything obvious from file paths alone. Tag each with relevance: low, medium, high, or critical. Emit zero observations if nothing durable happened."

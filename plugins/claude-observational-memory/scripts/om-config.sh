@@ -259,7 +259,10 @@ Respond with a single JSON object matching this schema, and nothing else: ${sche
 om_chat_request() {
   local body="$1" base_url="$2" api_key="$3"
   local resp content finish_reason
-  resp=$(curl -sS --max-time 60 "${base_url%/}/chat/completions" \
+  # 25s, not the Stop hook's full 60s budget: the schema-fallback path in
+  # om_call_model_unified can make two of these calls back to back, and both
+  # need to fit inside that budget or the whole hook gets killed mid-flight.
+  resp=$(curl -sS --max-time 25 "${base_url%/}/chat/completions" \
     -H "Authorization: Bearer ${api_key}" -H "Content-Type: application/json" \
     -d "$body" 2>/dev/null || true)
   content=$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null || true)
