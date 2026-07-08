@@ -404,7 +404,7 @@ om_run_reflect_pass() {
   [ "${count:-0}" -lt 3 ] && return 0
 
   local schema='{"type":"object","properties":{"reflections":{"type":"array","items":{"type":"object","properties":{"content":{"type":"string"},"supportingObservationIds":{"type":"array","items":{"type":"string"}}},"required":["content","supportingObservationIds"]}}},"required":["reflections"]}'
-  local sys="This is a simple, direct distillation task — answer immediately without extended step-by-step reasoning or deliberation. You distill Claude Code session observations (JSONL, each with an id) into durable reflections: stable facts about the user, project, decisions, and constraints that a future session would need. Skip anything transient or already covered by an existing reflection. Cite only real observation ids from the input in supportingObservationIds. Emit zero reflections if nothing is durable enough."
+  local sys="This is a simple, direct distillation task. You distill Claude Code session observations (JSONL, each with an id) into durable reflections: stable facts about the user, project, decisions, and constraints that a future session would need. Skip anything transient or already covered by an existing reflection. Cite only real observation ids from the input in supportingObservationIds. Emit zero reflections if nothing is durable enough."
   local user="Observations:
 ${obs_jsonl}"
   local resp
