@@ -19,10 +19,10 @@ This repo is a Claude Code **marketplace** named `claude-observational-memory` (
 /plugin install claude-om@claude-observational-memory
 ```
 
-**From a local path (this machine):**
+**From a local clone (for developing or testing this plugin itself):**
 
 ```text
-/plugin marketplace add /Users/sovorn/dev/claude-observational-memory
+/plugin marketplace add /path/to/claude-observational-memory
 /plugin install claude-om@claude-observational-memory
 ```
 
