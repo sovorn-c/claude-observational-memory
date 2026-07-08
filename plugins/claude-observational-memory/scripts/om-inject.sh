@@ -15,7 +15,7 @@ om_session_init "$SESSION_ID"
 
 [ "$(om_config_get injectOnSessionStart true)" = "true" ] || exit 0
 
-MAX_TOKENS=$(om_config_get observationsPoolMaxTokens 8000)
+MAX_TOKENS=$(om_config_get observationsPoolMaxTokens 20000)
 BUDGET_CHARS=$(( MAX_TOKENS * 4 ))
 
 # This session's own files only: memory carries forward across resume/compact

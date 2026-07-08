@@ -23,8 +23,8 @@ OBS_FILE=$(om_session_observations "$SESSION_ID")
 TOTAL_LINES=$(wc -l < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')
 [ -z "$TOTAL_LINES" ] && exit 0
 
-OBSERVE_AFTER=$(om_config_get observeAfterTokens 5000)
-REFLECT_AFTER=$(om_config_get reflectAfterTokens 10000)
+OBSERVE_AFTER=$(om_config_get observeAfterTokens 10000)
+REFLECT_AFTER=$(om_config_get reflectAfterTokens 20000)
 OBSERVE_FIRED=0
 
 CURRENT_TOKENS=$(om_usage_tokens_at_line "$TRANSCRIPT" "$TOTAL_LINES")

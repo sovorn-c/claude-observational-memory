@@ -121,10 +121,10 @@ Alternative: edit `~/.local/share/claude-observational-memory/config.json` direc
 
 ```json
 {
-  "observationsPoolMaxTokens": 8000,
-  "observationsPoolTargetTokens": 4000,
-  "observeAfterTokens": 5000,
-  "reflectAfterTokens": 10000,
+  "observationsPoolMaxTokens": 20000,
+  "observationsPoolTargetTokens": 10000,
+  "observeAfterTokens": 10000,
+  "reflectAfterTokens": 20000,
   "sessionRetentionDays": 30,
   "reflectOnPreCompact": true,
   "injectOnSessionStart": true
@@ -133,10 +133,10 @@ Alternative: edit `~/.local/share/claude-observational-memory/config.json` direc
 
 | Key | Env var | Default | What it does |
 |---|---|---|---|
-| `observeAfterTokens` | `OM_OBSERVE_AFTER_TOKENS` | `5000` | Real token growth (from each turn's recorded `usage`, not an estimate) that triggers an observe pass. Lower = more frequent, smaller model calls. |
-| `reflectAfterTokens` | `OM_REFLECT_AFTER_TOKENS` | `10000` | Real token growth of already-observed-but-unreflected content that triggers a reflect pass. |
-| `observationsPoolTargetTokens` | `OM_OBSERVATIONS_POOL_TARGET_TOKENS` | `4000` | Steady-state size the dropper archives the active pool back down to after a successful reflect pass. Keep well below `observationsPoolMaxTokens`. |
-| `observationsPoolMaxTokens` | `OM_OBSERVATIONS_POOL_MAX_TOKENS` | `8000` | Ceiling, not steady-state target. Caps how much `om-inject.sh` prints (× 4 chars/token), and forces a full fold instead of incremental once the active pool exceeds it. |
+| `observeAfterTokens` | `OM_OBSERVE_AFTER_TOKENS` | `10000` | Real token growth (from each turn's recorded `usage`, not an estimate) that triggers an observe pass. Lower = more frequent, smaller model calls. |
+| `reflectAfterTokens` | `OM_REFLECT_AFTER_TOKENS` | `20000` | Real token growth of already-observed-but-unreflected content that triggers a reflect pass. |
+| `observationsPoolTargetTokens` | `OM_OBSERVATIONS_POOL_TARGET_TOKENS` | `10000` | Steady-state size the dropper archives the active pool back down to after a successful reflect pass. Keep well below `observationsPoolMaxTokens`. |
+| `observationsPoolMaxTokens` | `OM_OBSERVATIONS_POOL_MAX_TOKENS` | `20000` | Ceiling, not steady-state target. Caps how much `om-inject.sh` prints (× 4 chars/token), and forces a full fold instead of incremental once the active pool exceeds it. |
 | `sessionRetentionDays` | `OM_SESSION_RETENTION_DAYS` | `30` | Days of no hook activity before a session's entire directory is deleted outright (not a tombstone). `0` or lower disables. Checked every `Stop`, pruned at most once/day. |
 | `reflectOnPreCompact` | `OM_REFLECT_ON_PRE_COMPACT` | `true` | Whether the `PreCompact` safety-net reflect pass runs at all. |
 | `injectOnSessionStart` | `OM_INJECT_ON_SESSION_START` | `true` | Whether `SessionStart` injects memory into context at all. |

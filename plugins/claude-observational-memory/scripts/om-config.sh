@@ -46,10 +46,10 @@ om_config_init() {
   if [ ! -f "${OM_CONFIG}" ]; then
     cat > "${OM_CONFIG}" <<'JSON'
 {
-  "observationsPoolMaxTokens": 8000,
-  "observationsPoolTargetTokens": 4000,
-  "observeAfterTokens": 5000,
-  "reflectAfterTokens": 10000,
+  "observationsPoolMaxTokens": 20000,
+  "observationsPoolTargetTokens": 10000,
+  "observeAfterTokens": 10000,
+  "reflectAfterTokens": 20000,
   "sessionRetentionDays": 30,
   "reflectOnPreCompact": true,
   "injectOnSessionStart": true
@@ -453,7 +453,7 @@ om_run_dropper_pass() {
   [ -s "$refl_file" ] || return 0
 
   local target
-  target=$(om_config_get observationsPoolTargetTokens 4000)
+  target=$(om_config_get observationsPoolTargetTokens 10000)
 
   local dropped_ids='[]'
   [ -s "$dropped_file" ] && dropped_ids=$(jq -s '[.[].id]' "$dropped_file" 2>/dev/null || echo '[]')
