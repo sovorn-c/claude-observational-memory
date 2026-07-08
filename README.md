@@ -10,20 +10,20 @@ This plugin closes that gap: it distills what happens during a session into smal
 
 ## Install
 
-This repo is a Claude Code **marketplace** named `claude-om` containing one plugin, also named `claude-om` — marketplace and plugin share a name since this repo only ever hosts the one plugin.
+This repo is a Claude Code **marketplace** named `claude-observational-memory` (matching the repo) containing one plugin named `claude-om` (matching its slash-command prefix).
 
 **From GitHub (shared):**
 
 ```text
 /plugin marketplace add sovorn-c/claude-observational-memory
-/plugin install claude-om@claude-om
+/plugin install claude-om@claude-observational-memory
 ```
 
 **From a local path (this machine):**
 
 ```text
 /plugin marketplace add /Users/sovorn/dev/claude-observational-memory
-/plugin install claude-om@claude-om
+/plugin install claude-om@claude-observational-memory
 ```
 
 After install, restart the session so hooks register.
@@ -31,14 +31,14 @@ After install, restart the session so hooks register.
 **Updating:** third-party marketplaces like this one do **not** auto-update by default, and Claude Code's opt-in marketplace auto-update has a known bug where it fetches but never pulls the working tree, so the plugin can silently stay on the old version even with it enabled ([anthropics/claude-code#49410](https://github.com/anthropics/claude-code/issues/49410)) — don't rely on it. Run this manually whenever you want to pick up the latest commit:
 
 ```text
-claude plugin marketplace update claude-om
-claude plugin update claude-om@claude-om
+claude plugin marketplace update claude-observational-memory
+claude plugin update claude-om@claude-observational-memory
 ```
 
 or the interactive-session equivalent:
 
 ```text
-/plugin marketplace update claude-om
+/plugin marketplace update claude-observational-memory
 /reload-plugins
 ```
 

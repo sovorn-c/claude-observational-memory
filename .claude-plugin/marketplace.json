@@ -1,5 +1,5 @@
 {
-  "name": "claude-om",
+  "name": "claude-observational-memory",
   "owner": { "name": "sovorn-c" },
   "plugins": [
     {
