@@ -28,23 +28,21 @@ This repo is a Claude Code **marketplace** named `observational-memory` containi
 
 After install, restart the session so hooks register.
 
-**Updating:** third-party marketplaces like this one do **not** auto-update by default — Claude Code only auto-updates official Anthropic marketplaces unless you opt in. Two ways to stay current:
+**Updating:** third-party marketplaces like this one do **not** auto-update by default, and Claude Code's opt-in marketplace auto-update has a known bug where it fetches but never pulls the working tree, so the plugin can silently stay on the old version even with it enabled ([anthropics/claude-code#49410](https://github.com/anthropics/claude-code/issues/49410)) — don't rely on it. Run this manually whenever you want to pick up the latest commit:
 
-- **One-time manual refresh** — run this whenever you want to pick up the latest commit right now:
+```text
+claude plugin marketplace update observational-memory
+claude plugin update claude-observational-memory@observational-memory
+```
 
-  ```text
-  /plugin marketplace update observational-memory
-  /reload-plugins
-  ```
+or the interactive-session equivalent:
 
-  The first command re-clones/pulls the marketplace repo and refreshes its catalog; the second applies any plugin version change without restarting the session. Run both together — updating the marketplace alone doesn't reload an already-loaded plugin.
+```text
+/plugin marketplace update observational-memory
+/reload-plugins
+```
 
-- **Enable auto-update (recommended, one-time setup)** — Claude Code then refreshes this marketplace and updates the plugin automatically at startup, no manual command needed afterward:
-
-  ```text
-  /plugin
-  ```
-  Go to **Marketplaces** → select `observational-memory` → **Enable auto-update**.
+The first command re-pulls the marketplace repo and refreshes its catalog; the second applies the plugin version change. Run both together — updating the marketplace alone doesn't reload an already-installed plugin.
 
 ## Requirements
 
