@@ -10,32 +10,41 @@ This plugin closes that gap: it distills what happens during a session into smal
 
 ## Install
 
-This repo is a Claude Code **marketplace** named `sovorn-c-om` containing one plugin, `claude-observational-memory`.
+This repo is a Claude Code **marketplace** named `observational-memory` containing one plugin, `claude-observational-memory`.
 
 **From GitHub (shared):**
 
 ```text
 /plugin marketplace add sovorn-c/claude-observational-memory
-/plugin install claude-observational-memory@sovorn-c-om
+/plugin install claude-observational-memory@observational-memory
 ```
 
 **From a local path (this machine):**
 
 ```text
 /plugin marketplace add /Users/sovorn/dev/claude-observational-memory
-/plugin install claude-observational-memory@sovorn-c-om
+/plugin install claude-observational-memory@observational-memory
 ```
 
 After install, restart the session so hooks register.
 
-**Updating:** third-party marketplaces like this one do **not** auto-update by default — Claude Code only auto-updates official Anthropic marketplaces unless you opt in. To pick up fixes/changes:
+**Updating:** third-party marketplaces like this one do **not** auto-update by default — Claude Code only auto-updates official Anthropic marketplaces unless you opt in. Two ways to stay current:
 
-```text
-/plugin marketplace update sovorn-c-om
-/reload-plugins
-```
+- **One-time manual refresh** — run this whenever you want to pick up the latest commit right now:
 
-Or enable it once so future updates are automatic: `/plugin` → **Marketplaces** → `sovorn-c-om` → **Enable auto-update**.
+  ```text
+  /plugin marketplace update observational-memory
+  /reload-plugins
+  ```
+
+  The first command re-clones/pulls the marketplace repo and refreshes its catalog; the second applies any plugin version change without restarting the session. Run both together — updating the marketplace alone doesn't reload an already-loaded plugin.
+
+- **Enable auto-update (recommended, one-time setup)** — Claude Code then refreshes this marketplace and updates the plugin automatically at startup, no manual command needed afterward:
+
+  ```text
+  /plugin
+  ```
+  Go to **Marketplaces** → select `observational-memory` → **Enable auto-update**.
 
 ## Requirements
 
