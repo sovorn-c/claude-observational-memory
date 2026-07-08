@@ -10,20 +10,20 @@ This plugin closes that gap: it distills what happens during a session into smal
 
 ## Install
 
-This repo is a Claude Code **marketplace** named `observational-memory` containing one plugin, `claude-observational-memory`.
+This repo is a Claude Code **marketplace** named `observational-memory` containing one plugin, `claude-om`.
 
 **From GitHub (shared):**
 
 ```text
 /plugin marketplace add sovorn-c/claude-observational-memory
-/plugin install claude-observational-memory@observational-memory
+/plugin install claude-om@observational-memory
 ```
 
 **From a local path (this machine):**
 
 ```text
 /plugin marketplace add /Users/sovorn/dev/claude-observational-memory
-/plugin install claude-observational-memory@observational-memory
+/plugin install claude-om@observational-memory
 ```
 
 After install, restart the session so hooks register.
@@ -32,7 +32,7 @@ After install, restart the session so hooks register.
 
 ```text
 claude plugin marketplace update observational-memory
-claude plugin update claude-observational-memory@observational-memory
+claude plugin update claude-om@observational-memory
 ```
 
 or the interactive-session equivalent:
@@ -52,9 +52,9 @@ The first command re-pulls the marketplace repo and refreshes its catalog; the s
 ## Commands
 
 ```text
-/claude-observational-memory:status           show storage usage and config
-/claude-observational-memory:reflect          manually run a reflection pass
-/claude-observational-memory:recall <id|q>    recall an entry by id or search
+/claude-om:status           show storage usage and config
+/claude-om:reflect          manually run a reflection pass
+/claude-om:recall <id|q>    recall an entry by id or search
 ```
 
 ## How it works
@@ -91,7 +91,9 @@ flowchart TD
     Query -->|"output to"| Session
 ```
 
-Every session gets its own storage directory — observe, reflect, the dropper, and injection only ever touch that session's own files, so two sessions running concurrently (e.g. two terminal tabs) never race on the same file. A brand-new session (`SessionStart` with `source: startup`) always starts empty; memory only carries forward across `resume` and `compact` of the *same* session_id. `recall` and `status` are the exceptions — they deliberately glob across every session directory, since one's a manual lookup and the other's an aggregate view, not automatic context injection.
+Every session gets its own storage directory — observe, reflect, the dropper, and injection only ever touch that session's own files, so two sessions running concurrently (e.g. two terminal tabs) never race on the same file. A brand-new session (`SessionStart` with `source: startup`) always starts empty; memory only carries forward across `resume` and `compact` of the *same* session_id.
+
+`recall` and `status` are slash commands, not hooks, so Claude Code never hands them a `session_id` the way it does for `SessionStart`/`Stop`/`PreCompact` — a plain `!`-executed subprocess gets no stdin payload and no env var for it. `status` is a config/storage diagnostic (is `llmApiKey` set, how big is everything, is the LLM route working) that was never meant to answer a per-session question, so it globs every session directory by design. `recall`'s id-lookup mode also globs by design, since an id is already a unique key — which session it lives in doesn't matter. `recall`'s text-search mode is different: every hook stamps a `current_session_id` pointer file on each invocation (`om_set_current_session`), and text search reads that pointer to default to searching only the current session, falling back to every session with `--all` or if no pointer has been stamped yet. That keeps ad-hoc searches from surfacing unrelated matches out of some other project's session.
 
 `om-inject.sh` avoids re-showing the same content on every injection: each session tracks `lastFullFoldTs`, the boundary of its last full fold. Normally injection is **incremental** — only reflections/observations after that boundary — and that window keeps accumulating across multiple incremental injections until a full fold resets it. A **full fold** (show everything, move the boundary to now) fires instead if the active observation pool exceeds `observationsPoolMaxTokens`, or no fold has happened yet this session — so a consolidation backlog never silently falls outside the window.
 
@@ -106,6 +108,7 @@ sessions/<session_id>/dropped.jsonl       tombstones for observations archived o
 sessions/<session_id>/state.json          this session's transcript-line watermarks for the observe/reflect token clock
 sessions/<session_id>/last_touch          epoch timestamp of this session's last hook activity, used by retention
 retention_last_run   epoch timestamp of the last retention sweep
+current_session_id    session_id most recently stamped by a hook; lets /recall default its text search to "this session" despite slash commands never receiving session_id directly
 config.json           settings
 model-caps.json        per-model cache of whether a configured reasoning_effort, and whether native json_schema structured output, was accepted (see Configuration)
 debug/om.log          hook log
@@ -124,7 +127,7 @@ Preferred: set env vars in `.claude/settings.json`'s `env` block — the same ov
 }
 ```
 
-Alternative: edit `~/.local/share/claude-observational-memory/config.json` directly (created on first run, values shown by `/claude-observational-memory:status`) if you need to change `observeAfterTokens`, `reflectAfterTokens`, or any of the other defaults below. Env vars take precedence over this file; this file takes precedence over the hardcoded defaults below.
+Alternative: edit `~/.local/share/claude-observational-memory/config.json` directly (created on first run, values shown by `/claude-om:status`) if you need to change `observeAfterTokens`, `reflectAfterTokens`, or any of the other defaults below. Env vars take precedence over this file; this file takes precedence over the hardcoded defaults below.
 
 ```json
 {

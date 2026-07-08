@@ -18,6 +18,7 @@ TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/nul
 [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] || exit 0
 
 om_session_init "$SESSION_ID"
+om_set_current_session "$SESSION_ID"
 OBS_FILE=$(om_session_observations "$SESSION_ID")
 
 TOTAL_LINES=$(wc -l < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')

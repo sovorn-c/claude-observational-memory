@@ -1,5 +1,5 @@
 ---
-description: Show claude-observational-memory status and storage usage
+description: Show claude-om status and storage usage
 ---
 
 !`${CLAUDE_PLUGIN_ROOT}/scripts/om-status.sh`

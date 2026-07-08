@@ -25,7 +25,7 @@ if [ -d "$OM_SESSIONS_DIR" ]; then
   done
 fi
 
-echo "claude-observational-memory status"
+echo "claude-om status"
 echo "  data dir:      $OM_DIR"
 echo "  sessions:      ${session_count}"
 echo "  observations:  ${obs_count} entries, ${dropped_count} dropped from active pool"

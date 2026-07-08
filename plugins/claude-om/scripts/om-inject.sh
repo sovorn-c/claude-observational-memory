@@ -12,6 +12,7 @@ INPUT="$(cat || true)"
 SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null || echo "")
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // "default"' 2>/dev/null || echo "default")
 om_session_init "$SESSION_ID"
+om_set_current_session "$SESSION_ID"
 
 [ "$(om_config_get injectOnSessionStart true)" = "true" ] || exit 0
 
@@ -105,7 +106,7 @@ fi
     fi
   fi
 
-  printf 'Use `/claude-observational-memory:recall <id>` to retrieve full source context for any entry above.\n'
+  printf 'Use `/claude-om:recall <id>` to retrieve full source context for any entry above.\n'
 } 2>/dev/null | tee "$OM_LAST_INJECTED" | head -c "$BUDGET_CHARS" || true
 
 if [ "$MODE" = "full" ]; then

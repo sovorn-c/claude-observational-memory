@@ -22,7 +22,7 @@ Run the recall script with an id or keyword:
 Or use the slash command:
 
 ```
-/claude-observational-memory:recall <id-or-keyword>
+/claude-om:recall <id-or-keyword>
 ```
 
 A 12-character hex id returns that exact entry. Any other text searches observations and reflections for matches.

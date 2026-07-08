@@ -1,4 +1,4 @@
-# om-config.sh — shared config and helpers for claude-observational-memory.
+# om-config.sh — shared config and helpers for claude-om.
 # Source this file from other scripts:
 #   source "${CLAUDE_PLUGIN_ROOT}/scripts/om-config.sh"
 # It also works when run standalone (sets CLAUDE_PLUGIN_ROOT fallback).
@@ -12,6 +12,7 @@
 : "${OM_LOG:="${OM_DIR}/debug/om.log"}"
 : "${OM_LAST_INJECTED:="${OM_DIR}/last-injected.md"}"
 : "${OM_RETENTION_MARKER:="${OM_DIR}/retention_last_run"}"
+: "${OM_CURRENT_SESSION_FILE:="${OM_DIR}/current_session_id"}"
 
 # om_config_get <key> [default] — prints a config value. Precedence: env var
 # override > config.json > default. The env var name is derived from the key
@@ -68,6 +69,17 @@ om_session_dir() { printf '%s/%s' "${OM_SESSIONS_DIR}" "${1:-default}"; }
 om_session_observations() { printf '%s/observations.jsonl' "$(om_session_dir "${1:-default}")"; }
 om_session_reflections()  { printf '%s/reflections.jsonl'  "$(om_session_dir "${1:-default}")"; }
 om_session_dropped()      { printf '%s/dropped.jsonl'      "$(om_session_dir "${1:-default}")"; }
+
+# om_set_current_session <session_id> — hooks are the only entry point that
+# ever receives session_id from Claude Code (via hook JSON on stdin); slash
+# commands like /recall run as plain subprocesses with no session_id at all.
+# Every hook stamps this pointer so /recall can default to "this session"
+# instead of globbing every session on disk. It's a "last hook-active
+# session" heuristic, not a true caller identity — with two sessions running
+# concurrently, whichever's hook fired most recently wins.
+om_set_current_session() {
+  printf '%s' "${1:-default}" > "${OM_CURRENT_SESSION_FILE}" 2>/dev/null || true
+}
 
 # om_session_init <session_id> — ensure this session's directory/files exist,
 # and stamp last_touch with the current epoch. last_touch is the activity

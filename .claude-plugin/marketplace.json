@@ -3,8 +3,8 @@
   "owner": { "name": "sovorn-c" },
   "plugins": [
     {
-      "name": "claude-observational-memory",
-      "source": "./plugins/claude-observational-memory",
+      "name": "claude-om",
+      "source": "./plugins/claude-om",
       "description": "Observational memory for Claude Code — captures observations, reflects them into durable memory, injects at session start, and recalls by ID."
     }
   ]

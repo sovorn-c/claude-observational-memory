@@ -15,6 +15,7 @@ om_config_init
 INPUT="$(cat || true)"
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // "default"' 2>/dev/null || echo "default")
 om_session_init "$SESSION_ID"
+om_set_current_session "$SESSION_ID"
 
 om_run_reflect_pass "$SESSION_ID"
 exit 0
